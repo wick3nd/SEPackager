@@ -1,4 +1,3 @@
-﻿using K4os.Compression.LZ4;
 using K4os.Compression.LZ4.Streams;
 using SEPpackager;
 using SEPpackager.CRC;
@@ -7,8 +6,14 @@ using System.Text;
 
 internal static class Decompression
 {
+    static byte[]? byteBuffer;
+    static readonly byte[] identifier = new byte[16];
+    static readonly byte[] correctIdentifier = [0x53, 0x45, 0x50, 0x2C, 0x59, 0x41, 0x59, 0x21];       // "SEP,YAY!"
+
+    static byte? minorVersion;
+
     static int mode;
-    static ushort fileCount;
+    static uint fileCount;
     static string[]? path;
     static string[]? partPointer;
     static uint[]? offset;
@@ -26,20 +31,21 @@ internal static class Decompression
     static readonly string[] filesToDecodeArray = new string[ushort.MaxValue];
 
     static byte partNumber;
-    //static string[]? validParts;
 
     public static void Decompress(string inputPath, string outputPath)
     {
-        Stopwatch watch = new();
-        watch.Start();
-
         inPath = inputPath;
         outPath = outputPath;
+
+        ValidateFile();
+
+        Stopwatch watch = new();
+        watch.Start();
 
         SearchHeaders();
 
         watch.Stop();
-        Console.Write($"\n\n  Operation done in {watch.ElapsedMilliseconds}ms.\n\n");
+        Console.Write($"\n  Operation done in {watch.ElapsedMilliseconds}ms.\n\n");
         
         Input();
 
@@ -56,9 +62,9 @@ internal static class Decompression
         fs.Seek(10, SeekOrigin.Begin);      // Skip the idendtifier and version
 
         mode = br.ReadByte();
-        fileCount = br.ReadUInt16();
+        fileCount = br.ReadUInt32();
 
-        fs.Seek(14, SeekOrigin.Begin);      // Skip the CRC8 chunk
+        fs.Seek(16, SeekOrigin.Begin);      // Skip the CRC8 chunk
 
         path = new string[fileCount];
         partPointer = new string[fileCount];
@@ -106,7 +112,33 @@ internal static class Decompression
             }
         }
     }
-    
+
+    private static void ValidateFile()
+    {
+        Console.Clear();
+        byteBuffer = File.ReadAllBytes(inPath!);
+        Buffer.BlockCopy(byteBuffer!, 0, identifier, 0, 16);
+
+        if (!CRC8.CheckChecksum(identifier)) throw new FileLoadException("Corrupt header detected");
+        if (!identifier[..8].SequenceEqual(correctIdentifier[..8])) throw new FileLoadException("Wrong format given");      // Checks the first 8 bytes if it has a correct header; sidenote -  dont delete any slicing or it will fuck itself up
+
+        Console.Write("File loaded\n---------------------------------\n");
+
+        CheckVersion();
+    }
+
+    private static void CheckVersion()
+    {
+        minorVersion = identifier[9];
+
+        Console.Write($"SteelEngine Package version {identifier[8]}.{minorVersion:D3}\n");
+
+        if (Compression.versionMajor != identifier[8] || Compression.versionMinor != minorVersion)
+        {
+            SEDebug.Log(SEDebugState.Warning, "This version of the packager may not work on this file.\n");
+        }
+    }
+
     private static void Input()
     {
         if (fileCount == 0)
