@@ -1,4 +1,4 @@
-﻿using K4os.Compression.LZ4.Streams;
+using K4os.Compression.LZ4.Streams;
 using SEPpackager.CRC;
 
 namespace SEPpackager
@@ -13,13 +13,13 @@ namespace SEPpackager
     internal static class Compression
     {
         public const byte versionMajor = 0x00;
-        public const byte versionMinor = 0x03;
+        public const byte versionMinor = 0x04;
 
         public static uint mode;
         public static string? partName;
         public static string? dirsName;
 
-        private static ushort fileCount;
+        private static uint fileCount;
         private static uint totalOffset = 11;
         private static uint fileSize;       // In Bytes
         private static uint originalFileSize;       // Size before compression
@@ -39,11 +39,13 @@ namespace SEPpackager
 
         private static void WriteDirsHeader(BinaryWriter bw)
         {
-            byte upperFCBytes = (byte)fileCount;
-            byte lowerFCBytes = (byte)(fileCount >> 8);
+            byte byte4 = (byte)fileCount;
+            byte byte3 = (byte)(fileCount >> 8);
+            byte byte2 = (byte)(fileCount >> 16);
+            byte byte1 = (byte)(fileCount >> 24);
 
             //                    S     E     P     ,     Y     A     Y     !
-            byte[] dataBuffer = [ 0x53, 0x45, 0x50, 0x2C, 0x59, 0x41, 0x59, 0x21, versionMajor, versionMinor, (byte)mode, upperFCBytes, lowerFCBytes ];
+            byte[] dataBuffer = [ 0x53, 0x45, 0x50, 0x2C, 0x59, 0x41, 0x59, 0x21, versionMajor, versionMinor, (byte)mode, byte4, byte3, byte2, byte1 ];
 
             bw.Write(dataBuffer);
             bw.Write(CRC8.ComputeChecksum(dataBuffer));
@@ -57,7 +59,7 @@ namespace SEPpackager
             FileStream partFS = new($"{outPath}{partName}{partPointer:D3}.sep", FileMode.OpenOrCreate, FileAccess.Write);
             BinaryWriter partBW = new(partFS);
             {
-                fileCount = (ushort)Directory.GetFiles(inPath, "*", SearchOption.AllDirectories).ToArray().Length;
+                fileCount = (uint)Directory.GetFiles(inPath, "*", SearchOption.AllDirectories).ToArray().Length;
 
                 string[]? fullFileName = Directory.GetFiles(inPath, "*", SearchOption.AllDirectories);
                 
@@ -133,7 +135,7 @@ namespace SEPpackager
                     totalOffset += fileSize;
                     temp += fileSize;
 
-                    Console.Write($"  ( {i+1}/{fileCount} )   {files}\n");
+                    Console.Write($"  ( {i+1}/{fileCount} )  {files}\n");
                 }
 
                 Console.Write($"  Dirs: {outPath}{dirsName}\n");
@@ -146,7 +148,7 @@ namespace SEPpackager
         private static void WritePartsHeader(BinaryWriter bw)
         {
             //         S     E     P     ,     Y     A     Y     !     Vmaj  Vmin  CRC
-            bw.Write([ 0x53, 0x45, 0x50, 0x2C, 0x59, 0x41, 0x59, 0x21, 0x00, 0x03, 0x44 ]);
+            bw.Write([ 0x53, 0x45, 0x50, 0x2C, 0x59, 0x41, 0x59, 0x21, 0x00, 0x04, 0x73 ]);
         }
 
         private static void WriteArchive()
