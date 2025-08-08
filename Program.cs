@@ -1,15 +1,9 @@
-﻿using SEPpackager.CRC;
+using SEPpackager.CRC;
 
 namespace SEPpackager
 {
     internal class Program
     {
-        static byte[]? byteBuffer;
-        static readonly byte[] identifier = new byte[14];
-        static readonly byte[] correctIdentifier = [0x53, 0x45, 0x50, 0x2C, 0x59, 0x41, 0x59, 0x21];       // "SEP,YAY!"
-
-        static byte? minorVersion;
-
         static void Main()
         {
             Console.Title = "SEP Packager";
@@ -173,7 +167,6 @@ namespace SEPpackager
 
             Console.SetCursorPosition(0, Console.CursorTop - 1);
             Console.Write(new string('\r', Console.WindowWidth));
-            Console.SetCursorPosition(0, Console.CursorTop - 1);
 
             Compression.Compress();
             Console.Write("\n  Press [ANY] to exit.");
@@ -211,35 +204,7 @@ namespace SEPpackager
 
             string outPath = ReadInput("[PATH] ");
 
-            byteBuffer = File.ReadAllBytes(inPath);
-
-            ValidateFile();
             Decompression.Decompress(inPath, outPath);
-        }
-
-        private static void ValidateFile()
-        {
-            Console.Clear();
-            Buffer.BlockCopy(byteBuffer!, 0, identifier, 0, 14);
-
-            if (!CRC8.CheckChecksum(identifier)) throw new FileLoadException("Corrupt header detected");
-            if (!identifier[..8].SequenceEqual(correctIdentifier[..8])) throw new FileLoadException("Wrong format given");      // Checks the first 8 bytes if it has a correct header; sidenote -  dont delete any slicing or it will fuck itself up
-
-            Console.Write("File loaded\n---------------------------------\n");
-
-            CheckVersion();
-        }
-        
-        private static void CheckVersion()
-        {
-            minorVersion = identifier[9];
-
-            Console.Write($"SteelEngine Package version {identifier[8]}.{minorVersion:D3}\n");
-
-            if (Compression.versionMajor != identifier[8] || Compression.versionMinor != minorVersion)
-            {
-                SEDebug.Log(SEDebugState.Warning, "This version of the packager may not work on this file.\n");
-            }
         }
 
         public static string ReadInput(string type = "")
