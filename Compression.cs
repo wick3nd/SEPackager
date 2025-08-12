@@ -13,7 +13,7 @@ namespace SEPpackager
     internal static class Compression
     {
         public const byte versionMajor = 0x00;
-        public const byte versionMinor = 0x04;
+        public const byte versionMinor = 0x05;
 
         public static uint mode;
         public static string? partName;
@@ -44,8 +44,8 @@ namespace SEPpackager
             byte byte2 = (byte)(fileCount >> 16);
             byte byte1 = (byte)(fileCount >> 24);
 
-            //                    S     E     P     ,     Y     A     Y     !
-            byte[] dataBuffer = [ 0x53, 0x45, 0x50, 0x2C, 0x59, 0x41, 0x59, 0x21, versionMajor, versionMinor, (byte)mode, byte4, byte3, byte2, byte1 ];
+            //                    S     E     P     .     D     I     R     S
+            byte[] dataBuffer = [ 0x53, 0x45, 0x50, 0x2E, 0x44, 0x49, 0x52, 0x53, versionMajor, versionMinor, (byte)mode, byte4, byte3, byte2, byte1 ];
 
             bw.Write(dataBuffer);
             bw.Write(CRC8.ComputeChecksum(dataBuffer));
@@ -64,6 +64,8 @@ namespace SEPpackager
                 string[]? fullFileName = Directory.GetFiles(inPath, "*", SearchOption.AllDirectories);
                 
                 WriteDirsHeader(bw);
+
+                Console.Write($"  Creating part {partPointer:D3}\n");
                 WritePartsHeader(partBW);
 
                 for (int i = 0; i != fileCount; i++)
@@ -117,7 +119,6 @@ namespace SEPpackager
                     if (temp >= maxSizePerPart)
                     {
                         partPointer++;
-                        temp = 0;
 
                         totalOffset = 11;
                         fileSize = 0;
@@ -128,17 +129,19 @@ namespace SEPpackager
 
                         partFS = new FileStream($"{outPath}{partName}{partPointer:D3}.sep", FileMode.Create, FileAccess.Write);
                         partBW = new BinaryWriter(partFS);
+
+                        Console.Write($"\n  Creating part {partPointer:D3}\n");
                         WritePartsHeader(partBW);
                     }
 
                     // Increase the offset for the next file
                     totalOffset += fileSize;
-                    temp += fileSize;
+                    temp = totalOffset;
 
                     Console.Write($"  ( {i+1}/{fileCount} )  {files}\n");
                 }
 
-                Console.Write($"  Dirs: {outPath}{dirsName}\n");
+                Console.Write($"\n  Dirs: {outPath}{dirsName}\n");
             }
 
             partFS.Close();
@@ -147,8 +150,11 @@ namespace SEPpackager
 
         private static void WritePartsHeader(BinaryWriter bw)
         {
-            //         S     E     P     ,     Y     A     Y     !     Vmaj  Vmin  CRC
-            bw.Write([ 0x53, 0x45, 0x50, 0x2C, 0x59, 0x41, 0x59, 0x21, 0x00, 0x04, 0x73 ]);
+            //                     S     E     P     .     D     A     T     A
+            byte[] partsHeader = [ 0x53, 0x45, 0x50, 0x2E, 0x44, 0x41, 0x54, 0x41, versionMajor, versionMajor ];
+
+            bw.Write(partsHeader);
+            bw.Write(CRC8.ComputeChecksum(partsHeader));
         }
 
         private static void WriteArchive()
