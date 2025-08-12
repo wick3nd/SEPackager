@@ -8,10 +8,10 @@ internal static class Decompression
 {
     static byte[]? byteBuffer;
     static readonly byte[] identifier = new byte[16];
-    static readonly byte[] correctIdentifier = [0x53, 0x45, 0x50, 0x2C, 0x59, 0x41, 0x59, 0x21];       // "SEP,YAY!"
-
-    static byte? minorVersion;
-
+    static readonly byte[] correctIdentifier = [ 0x53, 0x45, 0x50, 0x2E, 0x44, 0x49, 0x52, 0x53 ];       // "SEP.DIRS"
+    
+    static byte partNumber;
+    
     static int mode;
     static uint fileCount;
     static string[]? path;
@@ -30,7 +30,7 @@ internal static class Decompression
     static int filesToDecode;
     static readonly string[] filesToDecodeArray = new string[ushort.MaxValue];
 
-    static byte partNumber;
+    
 
     public static void Decompress(string inputPath, string outputPath)
     {
@@ -129,11 +129,9 @@ internal static class Decompression
 
     private static void CheckVersion()
     {
-        minorVersion = identifier[9];
+        Console.Write($"SteelEngine Package version {identifier[8]}.{identifier[9]:D3}\n");
 
-        Console.Write($"SteelEngine Package version {identifier[8]}.{minorVersion:D3}\n");
-
-        if (Compression.versionMajor != identifier[8] || Compression.versionMinor != minorVersion)
+        if (Compression.versionMajor != identifier[8] || Compression.versionMinor != identifier[9])
         {
             SEDebug.Log(SEDebugState.Warning, "This version of the packager may not work on this file.\n");
         }
