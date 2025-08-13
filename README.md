@@ -56,6 +56,6 @@ The data is stored depending on the mode of the archive.
 The compression is dependent on the mode of the archive. The function of different modes is listed below.
 | Mode | Use Case      | Compression | Compression Type |
 |------|---------------|-------------|------------------|
-| 0x00 | Miscellaneous | LZ4         | L_12             |
+| 0x00 | Miscellaneous | Zstd        | 5                |
 | 0x01 | Images        | Custom      | SteelEngine Ready|
 | 0x02 | Sound         | None        | None             |
