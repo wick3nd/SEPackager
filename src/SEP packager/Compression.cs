@@ -1,4 +1,4 @@
-﻿using SEPpackager.CRC;
+using SEPpackager.CRC;
 using ZstdSharp;
 using ZstdSharp.Unsafe;
 
@@ -26,31 +26,26 @@ internal static class Compression
     private static uint _originalFileSize;       // Size before compression
     private static string? _files;
 
-    public static uint maxSizePerPart = 104857600;      // In Bytes
+    public static uint maxSizePerPart = 104857600;
 
     private static readonly string _inPath = Path.Combine(Directory.GetCurrentDirectory(), @"input\");
     private static readonly string _outPath = Path.Combine(Directory.GetCurrentDirectory(), @"output\");
 
     public static void Compress()
-        {
+    {
             if (!Directory.Exists(_outPath)) Directory.CreateDirectory(_outPath);     // Creates a output directory if needed
 
             WriteArchive();
-        }
+    }
 
     private static void WriteDirsHeader(BinaryWriter bw)
-        {
-            byte byte4 = (byte)_fileCount;
-            byte byte3 = (byte)(_fileCount >> 8);
-            byte byte2 = (byte)(_fileCount >> 16);
-            byte byte1 = (byte)(_fileCount >> 24);
-
+    {
             //                    S     E     P     .     D     I     R     S
-            byte[] dataBuffer = [ 0x53, 0x45, 0x50, 0x2E, 0x44, 0x49, 0x52, 0x53, versionMajor, versionMinor, (byte)mode, byte4, byte3, byte2, byte1 ];
+            byte[] dataBuffer = [ 0x53, 0x45, 0x50, 0x2E, 0x44, 0x49, 0x52, 0x53, versionMajor, versionMinor, (byte)mode, (byte)_fileCount, (byte)(_fileCount >> 8), (byte)(_fileCount >> 16), (byte)(_fileCount >> 24) ];
 
             bw.Write(dataBuffer);
             bw.Write(CRC8.ComputeChecksum(dataBuffer));
-        }
+    }
 
     private static void WriteArchiveData(BinaryWriter bw)
     { 
@@ -59,7 +54,7 @@ internal static class Compression
             
         FileStream partFS = new($"{_outPath}{partName}{partPointer:D3}.sep", FileMode.OpenOrCreate, FileAccess.Write);
         BinaryWriter partBW = new(partFS);
-        { // TODO: can remove braces here
+        { // TODO: can remove braces here       // Its cleaner this way, wont do it
             string[] fullFileName = Directory.GetFiles(_inPath, "*", SearchOption.AllDirectories);
             _fileCount = (uint)fullFileName.AsSpan().Length;
 
@@ -93,12 +88,16 @@ internal static class Compression
 
                     case Mode.tex:
                     {
-                        if (ImageGrabber.TryGrabImage(fullFileName[i], out var imgData)) {
-                            using (imgData) {
+                        if (ImageGrabber.TryGrabImage(fullFileName[i], out var imgData))
+                        {
+                            using (imgData)
+                            {
                                 _fileSize = (uint)imgData.Length;
                                 imgData.CopyTo(partFS);
                             }
-                        } else {
+                        }
+                        else
+                        {
                             input.CopyTo(partFS);
                             _fileSize = (uint)new FileInfo(fullFileName[i]).Length;
                         }
@@ -120,6 +119,9 @@ internal static class Compression
 
                 // Note from @John-Paul-R: Isn't the BinaryWriter (or the backing stream) probably already buffered?
                 //   Why is the intermediary here necessary?
+
+                // Note from @wick3nd: This BinaryWriter for MemoryStream is to store the data below and check if the CRC is right.
+
                 // Writing to memory stream
                 MSbw.Write(_files);              // Relative path
                 MSbw.Write(partPointer);         // Part pointer
