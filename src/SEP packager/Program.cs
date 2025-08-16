@@ -80,7 +80,7 @@ namespace SEPpackager
                   Select the type of the files the archive should store.
 
                   1. Misc
-                  2. Texture        (Not properly implemented yet, works like in 3)
+                  2. Texture
                   3. Sound
 
                 
@@ -216,4 +216,5 @@ namespace SEPpackager
             return input;
         }
     }
+
 }
