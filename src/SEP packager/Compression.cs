@@ -1,4 +1,4 @@
-﻿using SEPpackager.CRC;
+using SEPpackager.CRC;
 using ZstdSharp;
 using ZstdSharp.Unsafe;
 
@@ -16,7 +16,7 @@ internal static class Compression
     public const byte versionMajor = 0x00;
     public const byte versionMinor = 0x06;
 
-    public static uint mode;
+    public static Mode mode;
     public static string? partName;
     public static string? dirsName;
 
@@ -26,31 +26,26 @@ internal static class Compression
     private static uint _originalFileSize;       // Size before compression
     private static string? _files;
 
-    public static uint maxSizePerPart = 104857600;      // In Bytes
+    public static uint maxSizePerPart = 104857600;
 
     private static readonly string _inPath = Path.Combine(Directory.GetCurrentDirectory(), @"input\");
     private static readonly string _outPath = Path.Combine(Directory.GetCurrentDirectory(), @"output\");
 
     public static void Compress()
-        {
+    {
             if (!Directory.Exists(_outPath)) Directory.CreateDirectory(_outPath);     // Creates a output directory if needed
 
             WriteArchive();
-        }
+    }
 
     private static void WriteDirsHeader(BinaryWriter bw)
-        {
-            byte byte4 = (byte)_fileCount;
-            byte byte3 = (byte)(_fileCount >> 8);
-            byte byte2 = (byte)(_fileCount >> 16);
-            byte byte1 = (byte)(_fileCount >> 24);
-
+    {
             //                    S     E     P     .     D     I     R     S
-            byte[] dataBuffer = [ 0x53, 0x45, 0x50, 0x2E, 0x44, 0x49, 0x52, 0x53, versionMajor, versionMinor, (byte)mode, byte4, byte3, byte2, byte1 ];
+            byte[] dataBuffer = [ 0x53, 0x45, 0x50, 0x2E, 0x44, 0x49, 0x52, 0x53, versionMajor, versionMinor, (byte)mode, (byte)_fileCount, (byte)(_fileCount >> 8), (byte)(_fileCount >> 16), (byte)(_fileCount >> 24) ];
 
             bw.Write(dataBuffer);
             bw.Write(CRC8.ComputeChecksum(dataBuffer));
-        }
+    }
 
     private static void WriteArchiveData(BinaryWriter bw)
     { 
@@ -59,10 +54,10 @@ internal static class Compression
             
         FileStream partFS = new($"{_outPath}{partName}{partPointer:D3}.sep", FileMode.OpenOrCreate, FileAccess.Write);
         BinaryWriter partBW = new(partFS);
-        {
-            string[]? fullFileName = Directory.GetFiles(_inPath, "*", SearchOption.AllDirectories);
+        { // TODO: can remove braces here       // Its cleaner this way, wont do it
+            string[] fullFileName = Directory.GetFiles(_inPath, "*", SearchOption.AllDirectories);
             _fileCount = (uint)fullFileName.AsSpan().Length;
-            
+
             WriteDirsHeader(bw);
 
             Console.Write($"  Creating part {partPointer:D3}\n");
@@ -76,7 +71,7 @@ internal static class Compression
 
                 switch (mode)
                 {
-                    case 0:     // misc
+                    case Mode.misc:
                         uint lB = (uint)partFS.Position;
                         using (var zstd = new CompressionStream(partFS, level: 15, leaveOpen: true))
                         {
@@ -91,28 +86,26 @@ internal static class Compression
 
                         break;
 
-                    case 1:     // tex
-                        bool success;
-                        MemoryStream? imgData;
-
-                        _ = new ImageGrabber(fullFileName[i], out success, out imgData);
-
-                        if (!success)
+                    case Mode.tex:
+                    {
+                        if (ImageGrabber.TryGrabImage(fullFileName[i], out var imgData))
                         {
-                            input.CopyTo(partFS);
-                            _fileSize = (uint)new FileInfo(fullFileName[i]).Length;
-                            input.Close();
+                            using (imgData)
+                            {
+                                _fileSize = (uint)imgData.Length;
+                                imgData.CopyTo(partFS);
+                            }
                         }
                         else
                         {
-                            _fileSize = (uint)imgData!.Length;
-                            imgData.CopyTo(partFS);
-                            imgData.Close();
+                            input.CopyTo(partFS);
+                            _fileSize = (uint)new FileInfo(fullFileName[i]).Length;
                         }
 
                         break;
+                    }
 
-                    case 2:     // sound
+                    case Mode.audio:
                         input.CopyTo(partFS);
                         _fileSize = (uint)new FileInfo(fullFileName[i]).Length;
 
@@ -124,15 +117,20 @@ internal static class Compression
                 using MemoryStream ms = new();
                 using BinaryWriter MSbw = new(ms);
 
+                // Note from @John-Paul-R: Isn't the BinaryWriter (or the backing stream) probably already buffered?
+                //   Why is the intermediary here necessary?
+
+                // Note from @wick3nd: This BinaryWriter for MemoryStream is to store the data below and check if the CRC is right.
+
                 // Writing to memory stream
                 MSbw.Write(_files);              // Relative path
-                MSbw.Write(partPointer);        // Part pointer
+                MSbw.Write(partPointer);         // Part pointer
                 MSbw.Write(_totalOffset);        // File offset
                 MSbw.Write(_fileSize);           // File length
                 if (mode == 0) MSbw.Write(_originalFileSize);
-                
+
                 byte[] dataBuffer = ms.ToArray();
-                
+
                 // Writing the actual data
                 bw.Write(dataBuffer);
                 bw.Write(CRC16.ComputeChecksum(dataBuffer));
@@ -154,11 +152,11 @@ internal static class Compression
                     Console.Write($"\n  Creating part {partPointer:D3}\n");
                     WritePartsHeader(partBW);
                 }
-                
+
                 // Increase the offset for the next file
                 _totalOffset += _fileSize;
                 temp = _totalOffset;
-                
+
                 Console.Write($"  ( {i + 1}/{_fileCount} )  {_files}\n");
             }
 
@@ -180,11 +178,10 @@ internal static class Compression
 
     private static void WriteArchive()
     {
-        using (File.Create(Path.Combine(_outPath, dirsName!))) { }       // Make the path for directory part
-        using FileStream fs = new(_outPath + dirsName, FileMode.Open, FileAccess.Write);
+        // Make the path for directory part
+        using FileStream fs = new(Path.Combine(_outPath, dirsName!), FileMode.Create, FileAccess.Write);
         using BinaryWriter bw = new(fs);
-        {
-            WriteArchiveData(bw);
-        }
+
+        WriteArchiveData(bw);
     }
 }
