@@ -1,64 +1,72 @@
-﻿using ImageMagick;
+﻿using System.Diagnostics.CodeAnalysis;
+using ImageMagick;
 using ZstdSharp;
 using ZstdSharp.Unsafe;
 
-namespace System.Runtime.Intrinsics
+namespace System.Runtime.Intrinsics;
+
+public static class ImageGrabber
 {
-    public class ImageGrabber
+    public static bool TryGrabImage(string path, [MaybeNullWhen(false)] out MemoryStream image)
     {
-        private static string? _inPath;
-        private static uint _originalLength;
-        private static byte _channelCount;
-        private static ushort _width;
-        private static ushort _height;
-        private static uint _packedBits;
-
-        public ImageGrabber(string path, out bool success, out MemoryStream? image)
-        {   
-            _inPath = path;
-
-            bool isImage = IsImage();
-            success = isImage;
-
+        if (!IsImage(path)) {
             image = null;
-            if (!isImage) return;     // Go back if there are no supported image formats
-
-            image = ImageDataStream();
+            return false;
         }
 
-        private static MemoryStream ImageDataStream()
-        {
-            MemoryStream ms = new();
+        image = ImageDataStream(path);
+        return true;
+    }
 
-            using var image = new MagickImage(_inPath!);
-            var pixels = image.GetPixels().GetValues().AsSpan();
+    private static MemoryStream ImageDataStream(string inPath)
+    {
+        MemoryStream ms = new();
 
-            // Get essential info
-            _originalLength = (uint)pixels.Length;
-            _channelCount = (byte)image.ChannelCount;
-            _width = (ushort)image.Width;
-            _height = (ushort)image.Height;
+        using var image = new MagickImage(inPath);
+        var pixels = image.GetPixels().GetValues().AsSpan();
 
-            _packedBits = (((((uint)(_width & 0x3FFF) << 14) | (uint)(_height & 0x3FFF)) << 3) | _channelCount) << 1;
+        // Get essential info
+        var originalLength = (uint)pixels.Length;
 
-            using var zstd = new Compressor(level: 15);      // Compress the data
+        var channelCount = (byte)image.ChannelCount;
+        var width = (ushort)image.Width;
+        var height = (ushort)image.Height;
 
-            zstd.SetParameter(ZSTD_cParameter.ZSTD_c_nbWorkers, Environment.ProcessorCount);        // Enable multithreading
-            zstd.SetParameter(ZSTD_cParameter.ZSTD_c_checksumFlag, 1);      // Enable CRC
+        var packedBits = (((((uint)(width & 0x3FFF) << 14) | (uint)(height & 0x3FFF)) << 3) | channelCount) << 1;
 
-            ms.Write(ImageHeader());
-            ms.Write(zstd.Wrap(pixels));
-            ms.Position = 0;
+        using var zstd = new Compressor(level: 15);      // Compress the data
 
-            return ms;
-        }
+        zstd.SetParameter(ZSTD_cParameter.ZSTD_c_nbWorkers, Environment.ProcessorCount);        // Enable multithreading
+        zstd.SetParameter(ZSTD_cParameter.ZSTD_c_checksumFlag, 1);      // Enable CRC
 
-        private static byte[] ImageHeader() => [ 0x53, 0x45, 0x52, 0x49, (byte)(_packedBits >> 24), (byte)(_packedBits >> 16), (byte)(_packedBits >> 8), (byte)_packedBits, (byte)_originalLength, (byte)(_originalLength >> 8), (byte)(_originalLength >> 16), (byte)(_originalLength >> 24) ];
+        ms.Write(ImageHeader(packedBits, originalLength));
+        ms.Write(zstd.Wrap(pixels));
+        ms.Position = 0;
 
-        private static bool IsImage()
-        {
-            try { return new MagickImageInfo(_inPath!) != null; }
-            catch { return false; }
-        }
+        return ms;
+    }
+
+    private static byte[] ImageHeader(
+        uint packedBits,
+        uint originalLength) =>
+    [
+        0x53,
+        0x45,
+        0x52,
+        0x49,
+        (byte)(packedBits >> 24),
+        (byte)(packedBits >> 16),
+        (byte)(packedBits >> 8),
+        (byte)packedBits,
+        (byte)originalLength,
+        (byte)(originalLength >> 8),
+        (byte)(originalLength >> 16),
+        (byte)(originalLength >> 24)
+    ];
+
+    private static bool IsImage(string inPath)
+    {
+        try { return new MagickImageInfo(inPath!) != null; }
+        catch { return false; }
     }
 }

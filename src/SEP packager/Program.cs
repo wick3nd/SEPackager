@@ -39,7 +39,7 @@ namespace SEPpackager
                 
                   1. Compress
                   2. Decompress
-                  3. Add to exisitng SEP                    (Unavaible, will crash)
+                  3. Add to existing SEP                    (Unavaible, will crash)
                   4. Delete from existing SEP               (Unavaible, will crash)
 
                   0. Exit
@@ -89,13 +89,13 @@ namespace SEPpackager
             string mode = ReadInput();
             switch (mode)
             {
-                case "1": Compression.mode = 0;
+                case "1": Compression.mode = Mode.misc;
                     break;
 
-                case "2": Compression.mode = 1;
+                case "2": Compression.mode = Mode.tex;
                     break;
 
-                case "3": Compression.mode = 2;
+                case "3": Compression.mode = Mode.audio;
                     break;
 
                 default: CompressionTUI();       // Clear the console and call the TUI again
