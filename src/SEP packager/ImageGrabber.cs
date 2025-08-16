@@ -1,4 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
 using ImageMagick;
 using ZstdSharp;
 using ZstdSharp.Unsafe;
@@ -48,21 +48,20 @@ public static class ImageGrabber
 
     private static byte[] ImageHeader(
         uint packedBits,
-        uint originalLength) =>
-    [
-        0x53,
-        0x45,
-        0x52,
-        0x49,
-        (byte)(packedBits >> 24),
-        (byte)(packedBits >> 16),
-        (byte)(packedBits >> 8),
-        (byte)packedBits,
-        (byte)originalLength,
-        (byte)(originalLength >> 8),
-        (byte)(originalLength >> 16),
-        (byte)(originalLength >> 24)
-    ];
+        uint originalLength) => [
+            0x53,
+            0x45,
+            0x52,
+            0x49,
+            (byte)(packedBits >> 24),
+            (byte)(packedBits >> 16),
+            (byte)(packedBits >> 8),
+            (byte)packedBits,
+            (byte)originalLength,
+            (byte)(originalLength >> 8),
+            (byte)(originalLength >> 16),
+            (byte)(originalLength >> 24)
+        ];
 
     private static bool IsImage(string inPath)
     {
