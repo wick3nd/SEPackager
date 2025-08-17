@@ -1,4 +1,4 @@
-using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics.CodeAnalysis;
 using ImageMagick;
 using ZstdSharp;
 using ZstdSharp.Unsafe;
@@ -20,48 +20,43 @@ public static class ImageGrabber
 
     private static MemoryStream ImageDataStream(string inPath)
     {
-        MemoryStream ms = new();
-
         using var image = new MagickImage(inPath);
-        var pixels = image.GetPixels().GetValues().AsSpan();
 
-        // Get essential info
-        var originalLength = (uint)pixels.Length;
+        var pixels = image.GetPixels().GetValues();
+        var ms = new MemoryStream();
 
-        var channelCount = (byte)image.ChannelCount;
-        var width = (ushort)image.Width;
-        var height = (ushort)image.Height;
+        using (var zstd = new CompressionStream(ms, level: 15))
+        {
+            zstd.SetParameter(ZSTD_cParameter.ZSTD_c_nbWorkers, Environment.ProcessorCount);
+            zstd.SetParameter(ZSTD_cParameter.ZSTD_c_checksumFlag, 1);
 
-        var packedBits = (((((uint)(width & 0x3FFF) << 14) | (uint)(height & 0x3FFF)) << 3) | channelCount) << 1;
+            // Write header
+            var packedBits = (((((image.Width & 0x3FFF) << 14) | (image.Height & 0x3FFF)) << 3) | (byte)image.ChannelCount) << 1;
+            ms.Write(ImageHeader(packedBits, (uint)pixels!.Length));
 
-        using var zstd = new Compressor(level: 15);      // Compress the data
+            // Compress pixels directly
+            zstd.Write(pixels, 0, pixels.Length);
+        }
 
-        zstd.SetParameter(ZSTD_cParameter.ZSTD_c_nbWorkers, Environment.ProcessorCount);        // Enable multithreading
-        zstd.SetParameter(ZSTD_cParameter.ZSTD_c_checksumFlag, 1);      // Enable CRC
-
-        ms.Write(ImageHeader(packedBits, originalLength));
-        ms.Write(zstd.Wrap(pixels));
         ms.Position = 0;
-
         return ms;
     }
 
-    private static byte[] ImageHeader(
-        uint packedBits,
-        uint originalLength) => [
-            0x53,
-            0x45,
-            0x52,
-            0x49,
-            (byte)(packedBits >> 24),
-            (byte)(packedBits >> 16),
-            (byte)(packedBits >> 8),
-            (byte)packedBits,
-            (byte)originalLength,
-            (byte)(originalLength >> 8),
-            (byte)(originalLength >> 16),
-            (byte)(originalLength >> 24)
-        ];
+
+    private static byte[] ImageHeader(uint packedBits, uint originalLength) => [
+        0x53,
+        0x45,
+        0x52,
+        0x49,
+        (byte)(packedBits >> 24),
+        (byte)(packedBits >> 16),
+        (byte)(packedBits >> 8),
+        (byte)packedBits,
+        (byte)originalLength,
+        (byte)(originalLength >> 8),
+        (byte)(originalLength >> 16),
+        (byte)(originalLength >> 24)
+    ];
 
     private static bool IsImage(string inPath)
     {

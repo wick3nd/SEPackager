@@ -2,7 +2,7 @@
 {
     internal class CRC16
     {
-        static readonly ushort[] table = [
+        private static ReadOnlySpan<ushort> Table => [
             0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50A5, 0x60C6, 0x70E7, 0x8108, 0x9129, 0xA14A, 0xB16B, 0xC18C, 0xD1AD, 0xE1CE, 0xF1EF,
             0x1231, 0x0210, 0x3273, 0x2252, 0x52B5, 0x4294, 0x72F7, 0x62D6, 0x9339, 0x8318, 0xB37B, 0xA35A, 0xD3BD, 0xC39C, 0xF3FF, 0xE3DE,
             0x2462, 0x3443, 0x0420, 0x1401, 0x64E6, 0x74C7, 0x44A4, 0x5485, 0xA56A, 0xB54B, 0x8528, 0x9509, 0xE5EE, 0xF5CF, 0xC5AC, 0xD58D,
@@ -21,32 +21,27 @@
             0xEF1F, 0xFF3E, 0xCF5D, 0xDF7C, 0xAF9B, 0xBFBA, 0x8FD9, 0x9FF8, 0x6E17, 0x7E36, 0x4E55, 0x5E74, 0x2E93, 0x3EB2, 0x0ED1, 0x1EF0
         ];
 
-        public static ushort ComputeChecksum(params byte[] bytes)
+        public static ushort ComputeChecksum(ReadOnlySpan<byte> bytes)
         {
             ushort crc = 0xFFFF;
 
             for (int i = 0; i != bytes.Length; i++)
             {
                 byte index = (byte)((crc >> 8) ^ bytes[i]);
-                crc = (ushort)((crc << 8) ^ table[index]);
+                crc = (ushort)((crc << 8) ^ Table[index]);
             }
 
             return crc;
         }
 
-        public static bool CheckChecksum(byte[] dataWithCRC)
+        public static bool CheckChecksum(ReadOnlySpan<byte> dataWithCRC)
         {
-            byte[] originalString = dataWithCRC[..^2];
-            byte[] CRC = dataWithCRC[^2..];
+            ReadOnlySpan<byte> originalString = dataWithCRC[..^2];
+            ReadOnlySpan<byte> CRC = dataWithCRC[^2..];
 
             ushort computedCrc = ComputeChecksum(originalString);
 
-            byte[] computedCrcBytes = [
-                (byte)computedCrc,
-                (byte)(computedCrc >> 8)
-            ];
-
-            return CRC.SequenceEqual(computedCrcBytes);
+            return CRC[0] == (byte)(computedCrc >> 8) && CRC[1] == (byte)computedCrc;
         }
     }
 }

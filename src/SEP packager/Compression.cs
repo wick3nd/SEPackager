@@ -1,4 +1,4 @@
-using SEPpackager.CRC;
+﻿using SEPpackager.CRC;
 using ZstdSharp;
 using ZstdSharp.Unsafe;
 
@@ -40,11 +40,26 @@ internal static class Compression
 
     private static void WriteDirsHeader(BinaryWriter bw)
     {
-            //                    S     E     P     .     D     I     R     S
-            byte[] dataBuffer = [ 0x53, 0x45, 0x50, 0x2E, 0x44, 0x49, 0x52, 0x53, versionMajor, versionMinor, (byte)mode, (byte)_fileCount, (byte)(_fileCount >> 8), (byte)(_fileCount >> 16), (byte)(_fileCount >> 24) ];
+        ReadOnlySpan<byte> dataBuffer = [
+            0x53,       // S
+            0x45,       // E
+            0x50,       // P
+            0x2E,       // .
+            0x44,       // D
+            0x49,       // I
+            0x52,       // R
+            0x53,       // S
+            versionMajor,
+            versionMinor,
+            (byte)mode,
+            (byte)_fileCount,
+            (byte)(_fileCount >> 8),
+            (byte)(_fileCount >> 16),
+            (byte)(_fileCount >> 24)
+        ];
 
-            bw.Write(dataBuffer);
-            bw.Write(CRC8.ComputeChecksum(dataBuffer));
+        bw.Write(dataBuffer);
+        bw.Write(CRC8.ComputeChecksum(dataBuffer));
     }
 
     private static void WriteArchiveData(BinaryWriter bw)
@@ -54,7 +69,7 @@ internal static class Compression
             
         FileStream partFS = new($"{_outPath}{partName}{partPointer:D3}.sep", FileMode.OpenOrCreate, FileAccess.Write);
         BinaryWriter partBW = new(partFS);
-        { // TODO: can remove braces here       // Its cleaner this way, wont do it
+        {
             string[] fullFileName = Directory.GetFiles(_inPath, "*", SearchOption.AllDirectories);
             _fileCount = (uint)fullFileName.AsSpan().Length;
 
@@ -117,11 +132,6 @@ internal static class Compression
                 using MemoryStream ms = new();
                 using BinaryWriter MSbw = new(ms);
 
-                // Note from @John-Paul-R: Isn't the BinaryWriter (or the backing stream) probably already buffered?
-                //   Why is the intermediary here necessary?
-
-                // Note from @wick3nd: This BinaryWriter for MemoryStream is to store the data below and check if the CRC is right.
-
                 // Writing to memory stream
                 MSbw.Write(_files);              // Relative path
                 MSbw.Write(partPointer);         // Part pointer
@@ -169,8 +179,18 @@ internal static class Compression
 
     private static void WritePartsHeader(BinaryWriter bw)
     {
-        //                     S     E     P     .     D     A     T     A
-        byte[] partsHeader = [ 0x53, 0x45, 0x50, 0x2E, 0x44, 0x41, 0x54, 0x41, versionMajor, versionMinor ];
+        byte[] partsHeader = [
+            0x53,       // S
+            0x45,       // E
+            0x50,       // P
+            0x2E,       // .
+            0x44,       // D
+            0x41,       // A
+            0x54,       // T
+            0x41,       // A
+            versionMajor,
+            versionMinor
+        ];
         
         bw.Write(partsHeader);
         bw.Write(CRC8.ComputeChecksum(partsHeader));

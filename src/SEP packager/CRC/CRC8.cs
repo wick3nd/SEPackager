@@ -1,8 +1,8 @@
 ﻿namespace SEPpackager.CRC
 {
-    public static class CRC8
+    public class CRC8
     {
-        private static readonly byte[] table = [
+        private static ReadOnlySpan<byte> Table => [
             0x00, 0x07, 0x0E, 0x09, 0x1C, 0x1B, 0x12, 0x15, 0x38, 0x3F, 0x36, 0x31, 0x24, 0x23, 0x2A, 0x2D,
             0x70, 0x77, 0x7E, 0x79, 0x6C, 0x6B, 0x62, 0x65, 0x48, 0x4F, 0x46, 0x41, 0x54, 0x53, 0x5A, 0x5D,
             0xE0, 0xE7, 0xEE, 0xE9, 0xFC, 0xFB, 0xF2, 0xF5, 0xD8, 0xDF, 0xD6, 0xD1, 0xC4, 0xC3, 0xCA, 0xCD,
@@ -21,18 +21,18 @@
             0xDE, 0xD9, 0xD0, 0xD7, 0xC2, 0xC5, 0xCC, 0xCB, 0xE6, 0xE1, 0xE8, 0xEF, 0xFA, 0xFD, 0xF4, 0xF3
         ];
 
-        public static byte ComputeChecksum(params byte[] bytes)
+        public static byte ComputeChecksum(ReadOnlySpan<byte> bytes)
         {
             byte crc = 0x00;
 
-            for (int i = 0; i != bytes.Length; i++) crc = table[crc ^ bytes[i]];
+            for (byte i = 0; i != bytes.Length; i++) crc = Table[crc ^ bytes[i]];
 
             return crc;
         }
 
-        public static bool CheckChecksum(params byte[] dataWithCRC)
+        public static bool CheckChecksum(ReadOnlySpan<byte> dataWithCRC)
         {
-            byte[] originalString = dataWithCRC[..^1];
+            ReadOnlySpan<byte> originalString = dataWithCRC[..^1];
             byte CRC = dataWithCRC[^1];
 
             return ComputeChecksum(originalString) == CRC;
