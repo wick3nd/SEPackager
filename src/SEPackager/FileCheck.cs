@@ -50,5 +50,10 @@
         }
 
         public static uint GetFileCount() => (uint)filePaths.Length;
+        public static void Dispoes()
+        {
+            files = [];
+            filePaths = [];
+        }
     }
 }

@@ -1,4 +1,6 @@
-﻿using SEPackager.CRC;
+﻿//#define SHOW_COMPRESSION_STREAM_RECREATION
+
+using SEPackager.CRC;
 using System.Text;
 
 namespace SEPackager
@@ -38,12 +40,13 @@ namespace SEPackager
             stream.Seek(14, SeekOrigin.Begin);
             UpdateDataStream();
 
-            for (int i = 0; i < FileCheck.GetFileCount(); i++)
+            for (int i = 0; i < _fileCount; i++)
             {
                 Mode compresMode = (Mode)FileCheck.files![i];
 
                 WriteDatArch(i, compresMode);
                 WriteEntry(binWriter, i, compresMode);
+                _originalFileLen = 0;
                 
                 if (_offset >= bytesPerArchive)
                 {
@@ -52,15 +55,30 @@ namespace SEPackager
 
                     UpdateDataStream();
                 }
+
+                Console.WriteLine($"  ({i + 1}/{_fileCount}) P:{_archPart:X3} |  {FileCheck.filePaths[i]}");
             }
+            Console.WriteLine("  Done.");
+
+            Console.Write("  Writing hash... ");
             WriteHash(binWriter);
+            Console.WriteLine("Done.");
 
            // Header last to write hash offset at once
+            Console.Write("  Finishing writing the archive... ");
             stream.Seek(0, SeekOrigin.Begin);
             WriteDirHeader(binWriter);
 
+            _hash.Dispose();
+            FileCheck.Dispoes();
             _dataStream?.Dispose();
             _dataWriter?.Dispose();
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+
+            Console.WriteLine("Done.");
         }
 
         private static void WriteDatArch(int index, Mode compression)
@@ -73,7 +91,7 @@ namespace SEPackager
                 case Mode.none:  Compression.Copy(stream, _dataStream!);
                     break;
 
-                case Mode.misc:  Compression.Copy(stream, _dataStream!);
+                case Mode.misc:  Compression.CompressZSTD(stream, _dataStream!, out _originalFileLen, 15);
                     break;
 
                 case Mode.image: Compression.Copy(stream, _dataStream!);
@@ -96,7 +114,9 @@ namespace SEPackager
 
             WriteDatHeader();
 
+#if SHOW_COMPRESSION_STREAM_RECREATION
             SEDebug.Log(SEDebugState.Info, $"Created stream {_archPart:D3}");
+#endif
         }
 
         private static void WriteEntry(BinaryWriter writer, int index, Mode compression)
@@ -130,10 +150,17 @@ namespace SEPackager
 
             PrepareHash(relativePath);  // Prepare the hash table for writing
 
-           // Update the data
-            _offset += fileLength;
-            if (_originalFileLen == 0) _entryOffset += (uint)(12 + stringLen);
-            else _entryOffset += (uint)(14 + stringLen);
+            // Update the data
+            if (_originalFileLen == 0)
+            {
+                _offset += fileLength;
+                _entryOffset += (uint)(12 + stringLen);
+            }
+            else
+            {
+                _offset += _originalFileLen;
+                _entryOffset += (uint)(14 + stringLen);
+            }
         }
         
         //  \/  Hash Table  \/

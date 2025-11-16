@@ -44,10 +44,16 @@ namespace SEPackager
 
             // Max size per archive part
             SetCursorPos(0, 16);
+            string defaultMaxMB = "100";
 
             string input = ReadInput();
-            if (input == "") input = "100";
-            input = MyRegex().Replace(input, "");  // Keep only digits - no floats, letters, special characters, sings, etc.
+            if (input == "")
+            {
+                input = defaultMaxMB;
+                SetCursorPos(4, 16);
+                Console.Write(defaultMaxMB);
+            }
+            input = MyRegex().Replace(input, "");  // Keep only digits - no floats, letters, special characters, signs, etc.
 
 
             // Pass it all to compression

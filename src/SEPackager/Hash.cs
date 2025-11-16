@@ -7,7 +7,7 @@ class Hash
     public readonly uint bucketCount;
 
     // List of integers to store values
-    public readonly List<uint>[] table;
+    public List<uint>[] table;
 
     public Hash(uint buckets)
     {
@@ -30,6 +30,7 @@ class Hash
     }
 
     // Deletes a key from the hash table
+    /*
     public void DeleteItem(string key)
     {
         uint CRC = CRC32.ComputeChecksum(Encoding.UTF8.GetBytes(key));
@@ -37,17 +38,8 @@ class Hash
         uint index = HashFunction(CRC);
         table[index].Remove(CRC);
     }
-
-    // Displays the hash table
-    public void DisplayHash()
-    {
-        for (int i = 0; i < bucketCount; i++)
-        {
-            Console.Write(i + " --> ");
-            foreach (uint x in table[i]) Console.Write(x + " ");
-            Console.WriteLine();
-        }
-    }
+    */
 
     public void GetHash(out List<uint>[] hashTable) => hashTable = table;
+    public void Dispose() => table = [];
 }

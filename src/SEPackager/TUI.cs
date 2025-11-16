@@ -1,4 +1,6 @@
-﻿namespace SEPackager
+﻿using System.Diagnostics;
+
+namespace SEPackager
 {
     internal class TUI
     {
@@ -60,12 +62,19 @@
         {
             Console.Write("""
 
+
                   Put the files inside the input folder and press enter to proceed.
 
                 """);
 
             Console.ReadKey();
+            Console.Clear();
+
+            Console.Write("  Preparing the files for compression... ");
             FileCheck.GetFileExtensions();
+            Console.WriteLine("Done.");
+
+            Console.Write("  Compressing the files...\n");
             Archive.Write();
         }
     }
