@@ -1,9 +1,21 @@
-﻿using FFMpegCore;
-using FFMpegCore.Enums;
-using FFMpegCore.Pipes;
+﻿using SevenZip.Compression.LZMA;
 using K4os.Compression.LZ4.Streams;
+using K4os.Compression.LZ4;
+using ZstdSharp;
+
+using FFMpegCore;
+using FFMpegCore.Pipes;
+
 using SEPackager.CRC;
-using System.IO;
+
+using BCnEncoder.Encoder;
+using BCnEncoder.ImageSharp;
+using BCnEncoder.Shared;
+
+using CommunityToolkit.HighPerformance;
+
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
 
 namespace SEPackager
 {
@@ -11,7 +23,7 @@ namespace SEPackager
     {
         public static void Copy(string path, FileStream outStream)
         {
-            using var inStream = new FileStream($"{path}", FileMode.Open, FileAccess.Read, FileShare.Read);
+            using var inStream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
             inStream.Position = 0;
 
             inStream.CopyTo(outStream);
@@ -20,13 +32,13 @@ namespace SEPackager
        // Fix the compression
         public static void CompressLZMA(string path, FileStream outStream, out uint fileSize)  // Slower, good ratio
         {
-            using var inStream = new FileStream($"{path}", FileMode.Open, FileAccess.Read, FileShare.Read);
+            using var inStream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
             inStream.Position = 0;
 
             long streamStart = outStream.Position;
 
             using var crcStream = new MemoryStream();
-            var LZMAEncoder = new SevenZip.Compression.LZMA.Encoder();
+            var LZMAEncoder = new Encoder();
             
             LZMAEncoder.WriteCoderProperties(crcStream);
             LZMAEncoder.Code(inStream, crcStream, inStream.Length, -1, null);
@@ -43,13 +55,13 @@ namespace SEPackager
 
         public static void CompressZSTD(string path, FileStream outStream, out uint fileSize, int compresLevel = 5)  // faster, worse ratio
         {
-            using var inStream = new FileStream($"{path}", FileMode.Open, FileAccess.Read, FileShare.Read);
+            using var inStream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
             inStream.Position = 0;
 
             long streamStart = outStream.Position;
 
             using var crcStream = new MemoryStream();
-            using (var ZSTDEncoder = new ZstdSharp.CompressionStream(crcStream, compresLevel)) inStream.CopyTo(ZSTDEncoder);
+            using (var ZSTDEncoder = new CompressionStream(crcStream, compresLevel)) inStream.CopyTo(ZSTDEncoder);
 
             uint CRC = CRC32.ComputeChecksum(crcStream.ToArray().AsSpan());
 
@@ -63,13 +75,13 @@ namespace SEPackager
 
         public static void CompressLZ4(string path, FileStream outStream, out uint fileSize, int compresLevel = 5)
         {
-            using var inStream = new FileStream($"{path}", FileMode.Open, FileAccess.Read, FileShare.Read);
+            using var inStream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
             inStream.Position = 0;
 
             long streamStart = outStream.Position;
 
             using var crcStream = new MemoryStream();
-            var settings = new LZ4EncoderSettings() { CompressionLevel = (K4os.Compression.LZ4.LZ4Level)compresLevel };
+            var settings = new LZ4EncoderSettings() { CompressionLevel = (LZ4Level)compresLevel };
 
             using var LZ4Encoder = LZ4Stream.Encode(crcStream, settings);
             inStream.CopyTo(LZ4Encoder);
@@ -85,31 +97,46 @@ namespace SEPackager
             fileSize = (uint)(outStream.Position - streamStart);
         }
 
-        public static void SoundToOGG(string path, FileStream outStream, out uint fileSize)  // Add CRC for fucks sake
+        public static void SoundToOGG(string path, FileStream outStream, out uint fileSize)
         {
-           // Creates a temporary ogg buffer
-           // string tempFilePath = $"{Program.soundBufferPath}";
-           // using var tempStream = new FileStream(tempFilePath, FileMode.Create, FileAccess.ReadWrite, FileShare.ReadWrite);
-           // File.SetAttributes(tempFilePath, FileAttributes.Hidden);
+            string tempPath = $"{Program.outPath}tempSoundBuffer_{Guid.NewGuid()}.tmp";
 
-            using var inStream = new FileStream($"{path}", FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite);
+            using var inStream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            using var tempStream = new FileStream(tempPath, FileMode.Create, FileAccess.ReadWrite, FileShare.None);
+            File.SetAttributes(tempPath, FileAttributes.Hidden);
 
             long streamStart = outStream.Position;
 
-                FFMpegArguments.FromPipeInput(new StreamPipeSource(inStream))
-                    .OutputToPipe(new StreamPipeSink(outStream), options => options
-                        .WithAudioCodec("libopus")
-                       // .WithAudioBitrate(AudioQuality.Good)
+            FFMpegArguments.FromPipeInput(new StreamPipeSource(inStream))
+                .OutputToPipe(new StreamPipeSink(tempStream), options => options
+                    .WithAudioCodec("libopus")
+                   // .WithAudioBitrate(AudioQuality.Good)
 
-                        .ForceFormat("ogg"))
-                    .ProcessSynchronously();
+                    .ForceFormat("ogg"))
+                .ProcessSynchronously();
+
+            tempStream.Position = 0;
+            byte[] buffer = new byte[tempStream.Length];
+            tempStream.Read(buffer, 0, buffer.Length);
+
+            uint crc = CRC32.ComputeChecksum(buffer);
+
+            tempStream.Position = 0;
+            tempStream.CopyTo(outStream);
+
+            outStream.Write(BitConverter.GetBytes(crc));
 
             fileSize = (uint)(outStream.Position - streamStart);
+
+            tempStream.Flush();
+            tempStream.Dispose();
+
+            File.Delete(tempPath);
         }
 
         public static void VideoToVG9(string path, FileStream outStream, out uint fileSize)
         {
-            using var inStream = new FileStream($"{path}", FileMode.Open, FileAccess.Read, FileShare.Read);
+            using var inStream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
             inStream.Position = 0;
 
             long streamStart = outStream.Position;
@@ -140,11 +167,28 @@ namespace SEPackager
             fileSize = (uint)(outStream.Position - streamStart);
         }
 
-        public static void ImageToBC()
+        public static void ImageToBC(string path, FileStream outStream, out uint fileSize, CompressionFormat format)
         {
+            using var tempStream = new MemoryStream();
+            using Image<Rgba32> image = Image.Load<Rgba32>(path);
 
+            long streamStart = outStream.Position;
+
+            var BCEncoder = new BcEncoder();
+            var outOptions = BCEncoder.OutputOptions;
+
+            outOptions.GenerateMipMaps = false;
+            outOptions.Quality = CompressionQuality.Balanced;
+            outOptions.FileFormat = OutputFileFormat.Dds;
+            outOptions.Format = format;
+
+            BCEncoder.EncodeToStream(image, tempStream);
+            tempStream.Write(CRC32.ComputeChecksum(tempStream.ToArray().AsSpan()));
+
+            tempStream.Position = 0;
+            tempStream.CopyTo(outStream);
+
+            fileSize = (uint)(outStream.Position - streamStart);
         }
-
-       // Add other compressions  - maybe
     }
 }

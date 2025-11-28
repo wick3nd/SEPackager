@@ -2,6 +2,8 @@
 {
     enum FileCompression
     {
+        gif  = 0,
+
         txt  = 1,
         json = 1,
         cfg  = 1,
@@ -16,16 +18,16 @@
         ttf  = 1,
         otf  = 1,
 
-        webm = 1,
-        mp4  = 1,
-
         png  = 2,
         jpg  = 2,
         jpeg = 2,
 
         ogg  = 3,
         mp3  = 3,
-        wav  = 3
+        wav  = 3,
+        
+        webm = 4,
+        mp4  = 4,
     }
 
     internal class FileCheck
@@ -36,6 +38,7 @@
         public static void GetFileExtensions()
         {
             files = new(filePaths.Length);
+
             for (int i = 0; i < filePaths.Length; i++)
             {
                 string extension = Path.GetExtension(filePaths[i]).TrimStart('.');
@@ -50,7 +53,7 @@
         }
 
         public static uint GetFileCount() => (uint)filePaths.Length;
-        public static void Dispoes()
+        public static void Dispose()
         {
             files = [];
             filePaths = [];

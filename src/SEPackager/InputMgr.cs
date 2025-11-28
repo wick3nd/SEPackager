@@ -31,7 +31,7 @@ namespace SEPackager
 
         public static void ListenCompres()
         {
-            // Name of the archives
+           // Name of the archives
             SetCursorPos(0, 12);
 
             string name = "";
@@ -42,7 +42,14 @@ namespace SEPackager
             }
 
 
-            // Max size per archive part
+           // Max size per archive part
+
+           //  ADD A
+           //  LIMIT
+           //  OF 4GB
+           //  TO PREVENT
+           //  CORRUPTION
+
             SetCursorPos(0, 16);
             string defaultMaxMB = "100";
 
@@ -55,8 +62,7 @@ namespace SEPackager
             }
             input = MyRegex().Replace(input, "");  // Keep only digits - no floats, letters, special characters, signs, etc.
 
-
-            // Pass it all to compression
+           // Pass it all to compression
             Archive.archName = name;
             Archive.bytesPerArchive = Convert.ToUInt32(input) * 1048576;  // MiB -> B
         }

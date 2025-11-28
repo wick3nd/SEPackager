@@ -1,6 +1,4 @@
-﻿//#define SHOW_COMPRESSION_STREAM_RECREATION
-
-using SEPackager.CRC;
+﻿using SEPackager.CRC;
 using System.Text;
 
 namespace SEPackager
@@ -10,44 +8,54 @@ namespace SEPackager
         none,
         misc,
         image,
-        sound
+        sound,
+        video
     }
 
     internal class Archive
     {
+       // Archive creation
         public static string? archName;
         public static uint bytesPerArchive;
         private static readonly uint _fileCount = FileCheck.GetFileCount();  // UInt24 not 32 - less files to store but that shouldn't be a big problem
 
+       // Entries
         private static byte _archPart;
         private static uint _offset = 8;
         private static uint _entryOffset = 14;
         private static uint _originalFileLen = 0;
 
+       // Streams
         private static FileStream? _dataStream;
         private static BinaryWriter? _dataWriter;
 
+       // Hash
         private static readonly Hash _hash = new((uint)(_fileCount * 1.8f));
-        private static readonly ushort[] _collisionDetection1 = new ushort[_hash.bucketCount];
-        private static readonly ushort[] _collisionDetection2 = new ushort[_hash.bucketCount];
-        private static readonly uint[] _hashEntryOffset = new uint[_hash.bucketCount];
+        private static ushort[] _collisionDetection1 = new ushort[_hash.bucketCount];
+        private static ushort[] _collisionDetection2 = new ushort[_hash.bucketCount];
+        private static uint[] _hashEntryOffset = new uint[_hash.bucketCount];
 
         public static void Write()
         {
+           // Create the output stream
             using var stream = new FileStream($"{Program.outPath}{archName}_dirs.sep", FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read);
             using var binWriter = new BinaryWriter(stream);
 
+           // Begin writing the entries first
             stream.Seek(14, SeekOrigin.Begin);
             UpdateDataStream();
 
+           // Write both archive simultaneously
             for (int i = 0; i < _fileCount; i++)
             {
                 Mode compresMode = (Mode)FileCheck.files![i];
+                string path = FileCheck.filePaths[i];
 
-                WriteDatArch(i, compresMode);
-                WriteEntry(binWriter, i, compresMode);
+                WriteDatArch(path, compresMode);
+                WriteEntry(binWriter, compresMode, path);
                 _originalFileLen = 0;
                 
+               // Create new data archive when its too big
                 if (_offset >= bytesPerArchive)
                 {
                     _offset = 8;
@@ -56,48 +64,41 @@ namespace SEPackager
                     UpdateDataStream();
                 }
 
-                Console.WriteLine($"  ({i + 1}/{_fileCount}) P:{_archPart:X3} |  {FileCheck.filePaths[i]}");
+                Console.WriteLine($"  ({i + 1}/{_fileCount}) P:{_archPart:X3} | {path}");
             }
-            Console.WriteLine("  Done.");
-
-            Console.Write("  Writing hash... ");
+           // Write the hash table
+            Console.Write("  Done.\n  Writing hash... ");
             WriteHash(binWriter);
+
             Console.WriteLine("Done.");
 
-           // Header last to write hash offset at once
+           // Write the header last
             Console.Write("  Finishing writing the archive... ");
+
             stream.Seek(0, SeekOrigin.Begin);
             WriteDirHeader(binWriter);
-
-            _hash.Dispose();
-            FileCheck.Dispoes();
-            _dataStream?.Dispose();
-            _dataWriter?.Dispose();
-
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            Dispose();
 
             Console.WriteLine("Done.");
         }
 
-        private static void WriteDatArch(int index, Mode compression)
+        private static void WriteDatArch(string path, Mode compression)
         {
-            using var stream = new FileStream($"{FileCheck.filePaths[index]}", FileMode.Open, FileAccess.Read, FileShare.Read);
-            stream.Position = 0;
-
             switch (compression)
             {
-                case Mode.none:  Compression.Copy(stream, _dataStream!);
+                case Mode.none:  Compression.Copy(path, _dataStream!);
                     break;
 
-                case Mode.misc:  Compression.CompressZSTD(stream, _dataStream!, out _originalFileLen, 15);
+                case Mode.misc:  Compression.CompressZSTD(path, _dataStream!, out _originalFileLen, 15);
                     break;
 
-                case Mode.image: Compression.Copy(stream, _dataStream!);
+                case Mode.image: Compression.ImageToBC(path, _dataStream!, out _originalFileLen, BCnEncoder.Shared.CompressionFormat.Bc7);
                     break;
 
-                case Mode.sound: Compression.Copy(stream, _dataStream!);
+                case Mode.sound: Compression.SoundToOGG(path, _dataStream!, out _originalFileLen);  // use something else than originalfilelen to prevent the creation of bigger entries
+                    break;
+
+                case Mode.video: Compression.VideoToVG9(path, _dataStream!, out _originalFileLen);
                     break;
             }
         }
@@ -109,29 +110,25 @@ namespace SEPackager
             _dataWriter?.Dispose();
 
            // Create new streams
-            _dataStream = new($"{Program.outPath}{archName}_{_archPart:D3}.sep", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read);
+            _dataStream = new($"{Program.outPath}{archName}_{_archPart:D3}.sep", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.ReadWrite);
             _dataWriter = new(_dataStream);
 
             WriteDatHeader();
-
-#if SHOW_COMPRESSION_STREAM_RECREATION
-            SEDebug.Log(SEDebugState.Info, $"Created stream {_archPart:D3}");
-#endif
         }
 
-        private static void WriteEntry(BinaryWriter writer, int index, Mode compression)
+        private static void WriteEntry(BinaryWriter writer, Mode compression, string path)
         {
            // Streams for CRC calculation and writing to stream
             using var ms = new MemoryStream();
             using var bw = new BinaryWriter(ms);
-
-            string filePath = FileCheck.filePaths[index];
             
-            string relativePath = Path.GetRelativePath(Program.inPath, filePath);
+            string relativePath = Path.GetRelativePath(Program.inPath, path);
             byte[] relativePathBytes = Encoding.UTF8.GetBytes(relativePath);
             byte stringLen = (byte)relativePathBytes.Length;
-            uint fileLength = (uint)new FileInfo(filePath).Length;
+            uint fileLength = (uint)new FileInfo(path).Length;
             byte[] packedfileLen = [(byte)fileLength, (byte)(fileLength >> 8), (byte)(fileLength >> 16), (byte)((fileLength >> 24) | (_originalFileLen << 4)), (byte)(_originalFileLen >> 4), (byte)(_originalFileLen >> 12), (byte)(_originalFileLen >> 20)];
+
+            bool isCompressed = compression == Mode.misc;
 
            // Entry structure
             bw.Write(stringLen);
@@ -139,28 +136,17 @@ namespace SEPackager
             bw.Write(_archPart);
             bw.Write(_offset);
             bw.Write((byte)compression);
-            if (_originalFileLen == 0) bw.Write(fileLength);
+            if (!isCompressed) bw.Write(fileLength);
             else bw.Write(packedfileLen);
 
-           // Calculate a CRC8 from the MemoryStream and write it
-            byte CRC = CRC8.ComputeChecksum(ms.ToArray());
-            bw.Write(CRC);
+            bw.Write(CRC8.ComputeChecksum(ms.ToArray()));
 
             writer.Write(ms.ToArray());
 
-            PrepareHash(relativePath);  // Prepare the hash table for writing
+            PrepareHash(relativePath);
 
-            // Update the data
-            if (_originalFileLen == 0)
-            {
-                _offset += fileLength;
-                _entryOffset += (uint)(12 + stringLen);
-            }
-            else
-            {
-                _offset += _originalFileLen;
-                _entryOffset += (uint)(14 + stringLen);
-            }
+            _offset += _originalFileLen == 0 ? fileLength : _originalFileLen;
+            _entryOffset += isCompressed ? (uint)(14 + stringLen) : (uint)(12 + stringLen);
         }
         
         //  \/  Hash Table  \/
@@ -170,7 +156,7 @@ namespace SEPackager
 
             while (_collisionDetection1[hashIndex] != 0) hashIndex = (hashIndex + 1) % (uint)_collisionDetection1.Length;  // Checks if the space is occupied
             _collisionDetection1[hashIndex] = CRC16.ComputeChecksum( Encoding.UTF8.GetBytes( path ) );  // First CRC check for full file name
-            _collisionDetection2[hashIndex] = CRC16.ComputeChecksum( Encoding.UTF8.GetBytes( path.Split(".")[0] ) );  // Second CRC check for file name without extension
+            _collisionDetection2[hashIndex] = CRC16.ComputeChecksum( Encoding.UTF8.GetBytes( Path.GetFileNameWithoutExtension(path) ) );  // Second CRC check for file name without extension
             _hashEntryOffset[hashIndex] = _entryOffset;
         }
 
@@ -228,6 +214,23 @@ namespace SEPackager
 
             _dataWriter?.Write(metadata);
             _dataWriter?.Write(CRC);
+        }
+
+       // Annihilate the data
+        private static void Dispose()
+        {
+            _collisionDetection1 = [];
+            _collisionDetection2 = [];
+            _hashEntryOffset = [];
+
+            FileCheck.Dispose();
+            _hash.Dispose();
+            _dataStream?.Dispose();
+            _dataWriter?.Dispose();
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
         }
     }
 }
