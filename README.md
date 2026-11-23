@@ -1,7 +1,7 @@
 # SEP packager
-SEP packager is a packager for files for a future game engine called SteelEngine
+SEP packager is a packager for files for SteelEngine
 
-Both the packager and the engine is a work in progress
+Both the packager and the engine are a work in progress
 
 # Format specification
 The archive is divided to 2 sections - directory archive and the data archive
